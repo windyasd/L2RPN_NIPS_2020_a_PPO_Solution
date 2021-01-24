@@ -45,7 +45,7 @@ class Tutor(BaseAgent):
             return False
         for line in [eval(key) for key, val in action.as_dict()['change_bus_vect'][str(substation_to_operate)].items() if 'line' in val['type']]:
             if obs.time_before_cooldown_line[line] or not obs.line_status[line]:
-                # line is cooling down, or line is disconnected
+                # line is cooling down, or line is disconnected  ？？？
                 return False
         return True
 
