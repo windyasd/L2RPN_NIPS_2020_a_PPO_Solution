@@ -33,7 +33,7 @@ if __name__ == '__main__':
         obs = env.reset()
         done = False
         while not done:
-            action = agent.act(obs, 0, 0)
+            action = agent.act(obs, 0, 0)   # 这里的reward 和done 没有用到，所以后两个参数随便选取
             obs, reward, done, info = env.step(action)
         if done:
             if 'GAME OVER' in str(info['exception']):

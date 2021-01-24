@@ -23,7 +23,7 @@ class MyAgent(BaseAgent):
         self.recovery_stack = []
         self.overflow_steps = 0
 
-    def find_best_line_to_reconnect(self, obs, original_action):
+    def find_best_line_to_reconnect(self, obs, original_action):    #这里返回的是两个动作合在一起
         disconnected_lines = np.where(obs.line_status == False)[0]
         if not len(disconnected_lines):
             return original_action
@@ -68,7 +68,7 @@ class MyAgent(BaseAgent):
                 return False
         return True
 
-    def act(self, observation, reward, done):
+    def act(self, observation, reward, done):   # 这里的reward 和done 没有用到
         tnow = observation.get_time_stamp()
         if self.last_step + datetime.timedelta(minutes=5) != tnow:
             print('\n\nscenario changes！')
@@ -88,11 +88,11 @@ class MyAgent(BaseAgent):
             else:
                 o, r, d, i = observation.simulate(self.array2action(self.actions1255[self.recovery_stack[0]]))
                 if (not d) and (o.rho.max() < 0.98):
-                    aid = self.recovery_stack.pop(0)
+                    aid = self.recovery_stack.pop(0)     #删除第一个元素
                     a = self.array2action(self.actions1255[aid])
                 else:
                     a = self.action_space({})
-            return self.find_best_line_to_reconnect(observation, a)
+            return self.find_best_line_to_reconnect(observation, a)    #这里返回的是两个动作合在一起
 
         # case: dangerous
         o, _, d, _ = observation.simulate(self.action_space({}))
@@ -101,12 +101,14 @@ class MyAgent(BaseAgent):
 
         action_chosen = None
         idx_chosen = None
+        #利用PPO模型给出最优动作
         features = np.concatenate(([0], observation.to_vect()))[None, self.chosen]
-        _, a_pred, _ = self.ppo.predict_step(features)
+        _, a_pred, _ = self.ppo.predict_step(features)      #这个函数的定义？
         a_pred = a_pred._numpy()
+
         sorted_actions = a_pred[0, :].argsort()[::-1]
         for k, idx in enumerate(sorted_actions):
-            if idx in [3, 39]:
+            if idx in [3, 39]:    #这里为什么跳过3：39？
                 continue
             a = self.array2action(self.actions[idx, :])
             if not self.is_legal(a, observation):
@@ -116,7 +118,7 @@ class MyAgent(BaseAgent):
                 continue
             if obs.rho.max() <= 0.95:
                 print('take action %d, max-rho to %.2f, simulation times: %d' % (idx, obs.rho.max(), k + 1))
-                return self.find_best_line_to_reconnect(observation, a)
+                return self.find_best_line_to_reconnect(observation, a)    #这里返回的是两个动作合在一起
             if obs.rho.max() < min_rho:
                 min_rho = obs.rho.max()
                 action_chosen = a
@@ -126,7 +128,7 @@ class MyAgent(BaseAgent):
             print('take action %s, max rho to %.2f, simulation times: 208' % (idx_chosen, min_rho))
             return self.find_best_line_to_reconnect(observation, action_chosen) if action_chosen else self.find_best_line_to_reconnect(observation, self.action_space({}))
 
-        # second-round search with mild effect
+        # second-round search with mild effect  温和的影响
         id_second_search = None
         min_rho0 = min_rho
         for idx, action_array in enumerate(self.actions1255):

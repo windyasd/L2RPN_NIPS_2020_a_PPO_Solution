@@ -32,10 +32,10 @@ class PPO(tf.Module):
 
         # obtain current gradient
         with tf.GradientTape() as tape:
-            l, p, _ = self.model.model(obs)
+            l, p, _ = self.model.model(obs) #新计算的actions输出
             actions = tf.cast(actions, tf.int32)
-            actions_one_hot = tf.one_hot(actions, l.get_shape().as_list()[-1])
-            neg_log_p = tf.nn.softmax_cross_entropy_with_logits(logits=l, labels=actions_one_hot)
+            actions_one_hot = tf.one_hot(actions, l.get_shape().as_list()[-1]) #输出为[0,1,0,0,0]类似的向量
+            neg_log_p = tf.nn.softmax_cross_entropy_with_logits(logits=l, labels=actions_one_hot)#计算交叉熵
 
             # calculate entropy bonus
             entropy = tf.reduce_mean(self._get_entropy(l))
@@ -92,13 +92,15 @@ class Policy_Value_Network(tf.Module):
     def step(self, obs):
         # l for logits, p for possibility, and v for value
         l, p, v = self.model(obs)
+
         # sampling by Gumbel-max trick
         u = tf.random.uniform(tf.shape(l), dtype=np.float32)
         a = tf.argmax(l - tf.math.log(-tf.math.log(u)), axis=-1)
         a_one_hot = tf.one_hot(a, l.get_shape().as_list()[-1])  # important!
+
         # calculate -log(pi)
-        neg_log_p = tf.nn.softmax_cross_entropy_with_logits(logits=l, labels=a_one_hot)
-        v = tf.squeeze(v, axis=1)
+        neg_log_p = tf.nn.softmax_cross_entropy_with_logits(logits=l, labels=a_one_hot)  # 计算交叉熵——可用来计算损失函数
+        v = tf.squeeze(v, axis=1)  # 删除为1的维度，这里输出为一维向量
         return a, v, neg_log_p, l
 
     @tf.function
@@ -126,10 +128,10 @@ class PVNet(tf.keras.Model):
         s = self.layer2(s)
         s = self.layer3(s)
         s = self.layer4(s)
-        l = self.act_layer(s)  # logits
+        l = self.act_layer(s)  # logits  未做归一化处理
         p = tf.nn.softmax(l)  # probability distribution of actions
         vh = self.val_hidden_layer(s)
-        v = self.val_layer(vh)  # state value
+        v = self.val_layer(vh)  # state value   即动作的编号
         return l, p, v
 
 
