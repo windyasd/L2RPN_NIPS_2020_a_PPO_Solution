@@ -33,6 +33,7 @@ class Tutor(BaseAgent):
 
     def array2action(self, total_array, reconnect_array):
         action = self.action_space({'change_bus': total_array[236:413]})
+        # action=env.action_space.from_vect(total_array) 理论上应该用这种方法，而绝不是通过看列号的
         action._change_bus_vect = action._change_bus_vect.astype(bool)
         action.update({'set_line_status': reconnect_array})
         return action
@@ -77,6 +78,7 @@ class Tutor(BaseAgent):
         if min_rho <= 0.999:
             print('    Action %d decreases max. rho to %.2f, search duration is %.2fs' % (return_idx, min_rho, time.time() - tick))
             return action_chosen if action_chosen else self.array2action(np.zeros(494), reconnect_array), return_idx
+        #好像self.array2action(np.zeros(494), reconnect_array)没有啥意义
         # hierarchy-2: 146 actions.
         for idx, action_array in enumerate(self.actions146):
             a = self.array2action(action_array, reconnect_array)

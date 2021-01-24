@@ -39,12 +39,13 @@ class Run_env(object):
         self.batch_reward_records = []
         self.aspace = self.envs.action_space[0]
         self.rec_rewards = []
-        self.worker_alive_steps = np.zeros(NUM_CORE)
-        self.alive_steps_record = []
+        self.worker_alive_steps = np.zeros(NUM_CORE)  # 记录环境在当前epoch中运行的时间段（正运行到多少步）
+        self.alive_steps_record = []   # #记录第id个环境有效运行的步数（这里不知为什么不分id进行记录）
 
     def run_n_steps(self, n_steps=None):
         def swap_and_flatten(arr):
             shape = arr.shape
+            # swapaxes()旋转维度
             return arr.swapaxes(0, 1).reshape(shape[0] * shape[1], *shape[2:])
 
         self.n_steps = n_steps if n_steps is not None else self.n_steps
@@ -56,14 +57,14 @@ class Run_env(object):
         obs_objs = self.envs.get_obs()
         obss = np.asarray([obs.to_vect()[self.chosen] for obs in obs_objs])  # (12, 1221,)
         dones = np.asarray([False for _ in range(NUM_CORE)])  # (12,)
-        agent_step_rs = np.asarray([0 for _ in range(NUM_CORE)], dtype=np.float64)  # (12,)
+        agent_step_rs = np.asarray([0 for _ in range(NUM_CORE)], dtype=np.float64)  # (12,)   rs: 指的是reward(多个env)
         for _ in range(self.n_steps):
             self.worker_alive_steps += 1
             actions = np.asarray([None for _ in range(NUM_CORE)])  # 均为shape=(12,)的np array
             values = np.asarray([None for _ in range(NUM_CORE)])
-            neg_log_ps = np.asarray([None for _ in range(NUM_CORE)])
+            neg_log_ps = np.asarray([None for _ in range(NUM_CORE)]) # 交叉熵——可用来计算损失函数
             for id in range(NUM_CORE):
-                if obss[id, 654:713].max() >= ACTION_THRESHOLD:
+                if obss[id, 654:713].max() >= ACTION_THRESHOLD:            #  代指line_rho，线路负载水平；这里表示越限才会采样
                     actions[id], values[id], neg_log_ps[id], _ = map(lambda x: x._numpy(), self.agent.step(tf.constant(obss[[id], :])))
                     if dones[id] == False and len(mb_obs[id]) > 0:
                         mb_rewards[id].append(agent_step_rs[id])
@@ -71,36 +72,37 @@ class Run_env(object):
                     mb_obs[id].append(obss[[id], :])
                     mb_dones[id].append(dones[[id]])
                     dones[id] = False
+
                     mb_actions[id].append(actions[id])
                     mb_values[id].append(values[id])
                     mb_neg_log_p[id].append(neg_log_ps[id])
                 else:
                     pass
             actions_array = [self.array2action(self.actions[i][0]) if i is not None else self.array2action(np.zeros(494), Run_env.reconnect_array(obs_objs[idx])) for idx, i in enumerate(actions)]
-            obs_objs, rs, env_dones, infos = self.envs.step(actions_array)
+            obs_objs, rs, env_dones, infos = self.envs.step(actions_array)   # rs: 指的是reward
             obss = np.asarray([obs.to_vect()[self.chosen] for obs in obs_objs])
             for id in range(NUM_CORE):
                 if env_dones[id]:
                     # death or end
-                    self.alive_steps_record.append(self.worker_alive_steps[id])
+                    self.alive_steps_record.append(self.worker_alive_steps[id]) #第id个环境有效运行的步数
                     self.worker_alive_steps[id] = 0
-                    if 'GAME OVER' in str(infos[id]['exception']):
+                    if 'GAME OVER' in str(infos[id]['exception']):  # 没有发现包含GAME OVER的exception, 需要重新定义
                         dones[id] = True
                         mb_rewards[id].append(agent_step_rs[id] - 300)  # 上一个agent step的reward
                     else:
                         dones[id] = True
-                        mb_rewards[id].append(agent_step_rs[id] + 500)
+                        mb_rewards[id].append(agent_step_rs[id] + 500)   # 这里为什么是加 500？？
             agent_step_rs += rs
         # end sampling
 
         # batch to trajectory
         for id in range(NUM_CORE):
-            if mb_obs[id] == []:
+            if mb_obs[id] == []:  #如果线路负载水平从来没超过ACTION_THRESHOLD，跳过
                 continue
-            if dones[id]:
+            if dones[id]:  # 运行期间有故障结束了
                 mb_dones[id].append(np.asarray([True]))
                 mb_values[id].append(np.asarray([0]))
-            else:
+            else:   # 下面的pop几个意思？？？
                 mb_obs[id].pop()
                 mb_actions[id].pop()
                 mb_neg_log_p[id].pop()
@@ -120,7 +122,7 @@ class Run_env(object):
             # calculate R and A
             mb_advs_i = np.zeros_like(mb_values_i)
             last_gae_lam = 0
-            for t in range(len(mb_obs[id]))[::-1]:
+            for t in range(len(mb_obs[id]))[::-1]: #倒序
                 if t == len(mb_obs[id]) - 1:
                     # last step
                     next_non_terminal = 1 - last_done
@@ -131,7 +133,7 @@ class Run_env(object):
                 # calculate delta：r + gamma * v' - v
                 delta = mb_rewards_i[t] + self.gamma * next_value * next_non_terminal - mb_values_i[t]
                 mb_advs_i[t] = last_gae_lam = delta + self.gamma * self.lam * next_non_terminal * last_gae_lam
-            mb_returns_i = mb_advs_i + mb_values_i
+            mb_returns_i = mb_advs_i + mb_values_i  # 这里为什么要相加？？
             obs2ret.append(mb_obs_i)
             action2ret.append(mb_actions_i)
             value2ret.append(mb_values_i)
@@ -148,7 +150,7 @@ class Run_env(object):
         return *map(swap_and_flatten, (obs2ret, return2ret, done2ret, action2ret, value2ret, neglogp2ret)), (sum([sum(i) for i in mb_rewards]) / action2ret.shape[0])
 
     @staticmethod
-    def reconnect_array(obs):
+    def reconnect_array(obs):  #给出重连线路的编号
         new_line_status_array = np.zeros_like(obs.rho)
         disconnected_lines = np.where(obs.line_status == False)[0]
         for line in disconnected_lines[::-1]:
@@ -158,6 +160,7 @@ class Run_env(object):
                 break
         return new_line_status_array
 
+    # 改变线路拓扑结构或重连断开的线路
     def array2action(self, total_array, reconnect_array=None):
         action = self.aspace({'change_bus': total_array[236:413]})
         action._change_bus_vect = action._change_bus_vect.astype(bool)

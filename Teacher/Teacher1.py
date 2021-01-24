@@ -42,6 +42,10 @@ def save_sample(save_path):
     if action == env.action_space({}):
         return None  # not necessary to save a "do nothing" action
     act_or, act_ex, act_gen, act_load = [], [], [], []
+    # action.as_dict()['change_bus_vect']['modif_subs_id'][0] 修改的substation编号
+    # action.as_dict()['change_bus_vect'][
+    #         action.as_dict()['change_bus_vect']['modif_subs_id'][0]].items()
+    #  修改的母线编号及母线种类
     for key, val in action.as_dict()['change_bus_vect'][
         action.as_dict()['change_bus_vect']['modif_subs_id'][0]].items():
         if val['type'] == 'line (extremity)':
@@ -51,7 +55,7 @@ def save_sample(save_path):
         elif val['type'] == 'load':
             act_load.append(key)
         else:
-            act_gen.append(key)
+            act_gen.append(key)#即为gen
     pd.concat(
         (
             pd.DataFrame(
@@ -63,6 +67,7 @@ def save_sample(save_path):
                      action.as_dict()['change_bus_vect']['modif_subs_id'][0], act_or, act_ex, act_gen, act_load,
                      obs.rho.max(), obs.rho.argmax(), obs_.rho.max(), obs_.rho.argmax()]).reshape([1, -1])),
             pd.DataFrame(np.concatenate((obs.to_vect(), obs_.to_vect(), action.to_vect())).reshape([1, -1]))
+            # 这里的to_vect将GridObject转化为 vector, 可以通过from_vect()转化未来，具体的情况再往后看
         ),
         axis=1
     ).to_csv(os.path.join(save_path, 'Experiences1.csv'), index=0, header=0, mode='a')
@@ -70,7 +75,7 @@ def save_sample(save_path):
 
 if __name__ == "__main__":
     # hyper-parameters
-    DATA_PATH = '../training_data_track1'  # for demo only, use your own dataset
+    DATA_PATH = '../training_data_track1'  # for demo only, use your own dataset 即使用的环境
     SCENARIO_PATH = '../training_data_track1/chronics'
     SAVE_PATH = './'
     LINES2ATTACK = [45, 56, 0, 9, 13, 14, 18, 23, 27, 39]
@@ -86,7 +91,8 @@ if __name__ == "__main__":
                 env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH, backend=backend)
             except:
                 env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH)
-            env.chronics_handler.shuffle(shuffler=lambda x: x[np.random.choice(len(x), size=len(x), replace=False)])
+            # env.chronics_handler.shuffle(shuffler=lambda x: x[np.random.choice(len(x), size=len(x), replace=False)])  #太麻烦了
+            env.chronics_handler.shuffle()
             # traverse all scenarios
             for chronic in range(len(os.listdir(SCENARIO_PATH))):
                 env.reset()
@@ -99,7 +105,7 @@ if __name__ == "__main__":
                 obs, reward, done, _ = env.step(env.action_space({}))
                 if done:
                     break
-                # disconnect the targeted line
+                # disconnect the targeted line 断开线路
                 new_line_status_array = np.zeros(obs.rho.shape)
                 new_line_status_array[line_to_disconnect] = -1
                 action = env.action_space({"set_line_status": new_line_status_array})

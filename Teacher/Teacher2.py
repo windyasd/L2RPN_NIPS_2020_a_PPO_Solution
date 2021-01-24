@@ -69,7 +69,7 @@ def save_sample(save_path='./'):
 
 
 def find_best_line_to_reconnect(obs, original_action):
-    disconnected_lines = np.where(obs.line_status == False)[0]
+    disconnected_lines = np.where(obs.line_status == False)[0] # 选出断连的线路编号
     if not len(disconnected_lines):
         return original_action
     o, _, _, _ = obs.simulate(original_action)

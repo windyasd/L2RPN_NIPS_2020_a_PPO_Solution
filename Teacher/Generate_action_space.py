@@ -26,13 +26,13 @@ def read_data(tabs):
 
 
 def filter_data(data):
-    data['del'] = False
+    data['del'] = False    #在数据最后一行加上标签
     for row in range(len(data) - 1):
         if data.iloc[row, 12] - data.iloc[row + 1, 14] < 0.02:
-            # this action decreases rho less than 2%
+            # this action decreases rho less than 2%    指代obs.rho.max()   -  obs_.rho.max()，这里为什么要row + 1 ???
             data.iloc[row, -1] = True
         if data.iloc[row, 7] == 'None':
-            # this action is "do nothing"
+            # this action is "do nothing"   指代 action.as_dict()['change_bus_vect']['modif_subs_id'][0]
             data.iloc[row, -1] = True
     return data
 
@@ -44,7 +44,7 @@ def save_action_space(data, save_path, threshold=0):
     # filter out actions that occur less frequently
     # the actions that occur times less than the threshold would be filtered out
     action_space = np.array([eval(item) for item in nums[nums >= threshold].index.values])
-    file = os.path.join(save_path, 'actions%d.npy' % action_space.shape[0])
+    file = os.path.join(save_path, 'actions%d.npy' % action_space.shape[0])    #可以看出有多少动作种类被构建
     np.save(file, action_space)
     print('generate an action space with the size of %d' % action_space.shape[0])
 
